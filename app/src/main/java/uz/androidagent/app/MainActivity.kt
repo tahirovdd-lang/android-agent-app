@@ -117,10 +117,19 @@ class MainActivity : AppCompatActivity() {
             ): Boolean {
                 fileChooserCallback?.onReceiveValue(null)
                 fileChooserCallback = filePathCallback
+
+                val chooserIntent = fileChooserParams?.createIntent()
+                if (chooserIntent == null) {
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                    return false
+                }
+
                 return runCatching {
-                    fileChooserLauncher.launch(fileChooserParams?.createIntent())
+                    fileChooserLauncher.launch(chooserIntent)
                     true
                 }.getOrElse {
+                    fileChooserCallback?.onReceiveValue(null)
                     fileChooserCallback = null
                     false
                 }

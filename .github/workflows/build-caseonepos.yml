@@ -27,16 +27,14 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Restore exact original CaseonePOS logo
+      - name: Validate exact CaseonePOS logo
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsSL \
-            "https://raw.githubusercontent.com/tahirovdd-lang/android-agent-app/31409dda92743e1599568a96533b8b290506ad8f/app/src/main/res/drawable-nodpi/caseonepos_original_logo.png" \
-            -o /tmp/caseonepos-logo.base64
-          base64 --decode /tmp/caseonepos-logo.base64 > app/src/main/res/drawable/caseonepos_logo.png
-          echo "bb6d3a3f36737e49061503a205550c206f4b8c1ca72466a066f735354c5e20f2  app/src/main/res/drawable/caseonepos_logo.png" | sha256sum --check
-          file app/src/main/res/drawable/caseonepos_logo.png | grep -F "PNG image data, 640 x 640"
+          LOGO="app/src/main/res/drawable/caseonepos_logo.png"
+          test -s "$LOGO"
+          echo "bb6d3a3f36737e49061503a205550c206f4b8c1ca72466a066f735354c5e20f2  $LOGO" | sha256sum --check
+          file "$LOGO" | grep -F "PNG image data, 640 x 640"
 
       - name: Validate project structure and branding references
         shell: bash
@@ -46,7 +44,6 @@ jobs:
           test -f build.gradle.kts
           test -f app/build.gradle.kts
           test -f app/src/main/AndroidManifest.xml
-          test -s app/src/main/res/drawable/caseonepos_logo.png
           test -f app/src/main/res/mipmap/caseonepos_icon.xml
           test -f app/src/main/res/mipmap-anydpi-v26/caseonepos_icon.xml
           grep -F 'android:icon="@mipmap/caseonepos_icon"' app/src/main/AndroidManifest.xml

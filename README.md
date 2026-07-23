@@ -1,2 +1,28 @@
-# android-agent-app
-AI-powered Android app builder that generates complete Kotlin &amp; Jetpack Compose projects with one click.
+# Android Agent App
+
+Android-версия AI App Builder. Приложение открывает действующий интерфейс iPhone/web-версии и адаптирует его для Android.
+
+## Интерфейс
+
+`https://tahirovdd-lang.github.io/ios-agent-bot/`
+
+## Возможности
+
+- полноэкранная работа на Android;
+- сохранение авторизации и сессии;
+- загрузка файлов через системный выбор Android;
+- скачивание созданных файлов, PDF, ZIP, APK и других результатов;
+- свайп вниз для обновления;
+- корректная системная кнопка «Назад»;
+- обработка внешних ссылок;
+- экран ошибки при отсутствии интернета;
+- автоматическая сборка APK через GitHub Actions.
+
+## Сборка APK
+
+1. Откройте вкладку **Actions**.
+2. Выберите **Build Android APK**.
+3. Нажмите **Run workflow**.
+4. После завершения скачайте артефакт **Android-Agent-App-APK**.
+
+Минимальная версия: Android 7.0 (API 24).

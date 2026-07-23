@@ -27,7 +27,18 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Validate project structure
+      - name: Restore exact original CaseonePOS logo
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            "https://raw.githubusercontent.com/tahirovdd-lang/android-agent-app/31409dda92743e1599568a96533b8b290506ad8f/app/src/main/res/drawable-nodpi/caseonepos_original_logo.png" \
+            -o /tmp/caseonepos-logo.base64
+          base64 --decode /tmp/caseonepos-logo.base64 > app/src/main/res/drawable/caseonepos_logo.png
+          echo "bb6d3a3f36737e49061503a205550c206f4b8c1ca72466a066f735354c5e20f2  app/src/main/res/drawable/caseonepos_logo.png" | sha256sum --check
+          file app/src/main/res/drawable/caseonepos_logo.png | grep -F "PNG image data, 640 x 640"
+
+      - name: Validate project structure and branding references
         shell: bash
         run: |
           set -euo pipefail
@@ -38,11 +49,15 @@ jobs:
           test -s app/src/main/res/drawable/caseonepos_logo.png
           test -f app/src/main/res/mipmap/caseonepos_icon.xml
           test -f app/src/main/res/mipmap-anydpi-v26/caseonepos_icon.xml
+          grep -F 'android:icon="@mipmap/caseonepos_icon"' app/src/main/AndroidManifest.xml
+          grep -F 'android:roundIcon="@mipmap/caseonepos_icon"' app/src/main/AndroidManifest.xml
+          grep -F 'android:label="CaseonePOS"' app/src/main/AndroidManifest.xml
+          grep -F '@drawable/caseonepos_logo' app/src/main/res/values-v31/themes.xml
 
       - name: Build CaseonePOS debug APK
         run: gradle --no-daemon clean :app:assembleDebug --stacktrace
 
-      - name: Verify APK identity and packaged resources
+      - name: Verify APK identity and packaged branding
         shell: bash
         run: |
           set -euo pipefail
@@ -54,7 +69,7 @@ jobs:
           test -x "$AAPT"
 
           "$AAPT" dump badging "$APK" | tee apk-verification.txt
-          grep -F "package: name='uz.caseonepos.app'" apk-verification.txt
+          grep -F "package: name='uz.caseonepos.app' versionCode='4' versionName='1.0.3'" apk-verification.txt
           grep -F "application-label:'CaseonePOS'" apk-verification.txt
           grep -F "application-icon-" apk-verification.txt
 
@@ -63,14 +78,14 @@ jobs:
           grep -F "caseonepos_icon" apk-resources.txt
 
           sha256sum "$APK" | tee apk-sha256.txt
-          cp "$APK" CaseonePOS-1.0.2.apk
+          cp "$APK" CaseonePOS-1.0.3.apk
 
       - name: Upload verified CaseonePOS APK
         uses: actions/upload-artifact@v4
         with:
-          name: CaseonePOS-APK
+          name: CaseonePOS-APK-1.0.3
           path: |
-            CaseonePOS-1.0.2.apk
+            CaseonePOS-1.0.3.apk
             apk-verification.txt
             apk-resources.txt
             apk-sha256.txt

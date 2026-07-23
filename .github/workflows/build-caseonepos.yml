@@ -1,9 +1,12 @@
-name: Build CaseonePOS APK
+name: Build and verify CaseonePOS APK
 
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -24,19 +27,51 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Clean old outputs
-        run: gradle clean
+      - name: Validate project structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+          test -f app/src/main/res/drawable/caseonepos_logo.png
+          test -f app/src/main/res/mipmap/caseonepos_icon.xml
+          test -f app/src/main/res/mipmap-anydpi-v26/caseonepos_icon.xml
 
       - name: Build CaseonePOS debug APK
-        run: gradle :app:assembleDebug --stacktrace
+        run: gradle --no-daemon clean :app:assembleDebug --stacktrace
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk CaseonePOS-1.0.2.apk
+      - name: Verify APK identity and packaged resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
 
-      - name: Upload CaseonePOS APK
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          AAPT="$BUILD_TOOLS/aapt"
+          test -x "$AAPT"
+
+          "$AAPT" dump badging "$APK" | tee apk-verification.txt
+          grep -F "package: name='uz.caseonepos.app'" apk-verification.txt
+          grep -F "application-label:'CaseonePOS'" apk-verification.txt
+          grep -F "application-icon-" apk-verification.txt
+
+          unzip -l "$APK" | tee apk-files.txt
+          grep -E "caseonepos_(logo|icon)" apk-files.txt
+
+          sha256sum "$APK" | tee apk-sha256.txt
+          cp "$APK" CaseonePOS-1.0.2.apk
+
+      - name: Upload verified CaseonePOS APK
         uses: actions/upload-artifact@v4
         with:
           name: CaseonePOS-APK
-          path: CaseonePOS-1.0.2.apk
+          path: |
+            CaseonePOS-1.0.2.apk
+            apk-verification.txt
+            apk-files.txt
+            apk-sha256.txt
           if-no-files-found: error
           retention-days: 30

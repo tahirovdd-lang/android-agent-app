@@ -35,7 +35,7 @@ jobs:
           test -f build.gradle.kts
           test -f app/build.gradle.kts
           test -f app/src/main/AndroidManifest.xml
-          test -f app/src/main/res/drawable/caseonepos_logo.png
+          test -s app/src/main/res/drawable/caseonepos_logo.png
           test -f app/src/main/res/mipmap/caseonepos_icon.xml
           test -f app/src/main/res/mipmap-anydpi-v26/caseonepos_icon.xml
 
@@ -58,8 +58,9 @@ jobs:
           grep -F "application-label:'CaseonePOS'" apk-verification.txt
           grep -F "application-icon-" apk-verification.txt
 
-          unzip -l "$APK" | tee apk-files.txt
-          grep -E "caseonepos_(logo|icon)" apk-files.txt
+          "$AAPT" dump resources "$APK" | tee apk-resources.txt
+          grep -F "caseonepos_logo" apk-resources.txt
+          grep -F "caseonepos_icon" apk-resources.txt
 
           sha256sum "$APK" | tee apk-sha256.txt
           cp "$APK" CaseonePOS-1.0.2.apk
@@ -71,7 +72,7 @@ jobs:
           path: |
             CaseonePOS-1.0.2.apk
             apk-verification.txt
-            apk-files.txt
+            apk-resources.txt
             apk-sha256.txt
           if-no-files-found: error
           retention-days: 30

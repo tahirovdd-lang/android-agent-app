@@ -27,11 +27,15 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Validate exact CaseonePOS logo
+      - name: Restore and validate exact CaseonePOS logo
         shell: bash
         run: |
           set -euo pipefail
+          SOURCE="app/src/main/res/drawable-nodpi/caseonepos_original_logo.png"
           LOGO="app/src/main/res/drawable/caseonepos_logo.png"
+
+          test -s "$SOURCE"
+          tr -d '\r\n\t ' < "$SOURCE" | base64 --decode > "$LOGO"
           test -s "$LOGO"
           echo "bb6d3a3f36737e49061503a205550c206f4b8c1ca72466a066f735354c5e20f2  $LOGO" | sha256sum --check
           file "$LOGO" | grep -F "PNG image data, 640 x 640"

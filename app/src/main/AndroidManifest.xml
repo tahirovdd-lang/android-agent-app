@@ -8,9 +8,9 @@
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
-        android:icon="@drawable/caseonepos_logo"
+        android:icon="@mipmap/caseonepos_icon"
         android:label="CaseonePOS"
-        android:roundIcon="@drawable/caseonepos_logo"
+        android:roundIcon="@mipmap/caseonepos_icon"
         android:supportsRtl="true"
         android:theme="@style/Theme.CaseonePOS"
         android:usesCleartextTraffic="false">

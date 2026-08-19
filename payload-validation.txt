@@ -1,0 +1,10 @@
+commit=03827d0e551be9c282237272cdc0b02982ac537e
+date=2026-08-19T14:41:53Z
+parts=13
+base64_bytes=130000
+base64_decode_status=0
+archive_bytes=97500
+archive_sha256=e5bd7c1e4baed6dac4cba4094f9b66f9f486a8effdb7121c7dd767f657a75b0a
+xz_status=1
+xz_error=xz: /tmp/caseonepos.tar.xz: Compressed data is corrupt 
+result=PAYLOAD_CORRUPT_OR_INCOMPLETE

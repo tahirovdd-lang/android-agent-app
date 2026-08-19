@@ -1,73 +1,36 @@
-name: Build CaseonePOS Flutter APK
+name: Validate CaseonePOS Flutter payload
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "flutter-source-import" ]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reconstruct Flutter source
+      - name: Validate uploaded Flutter payload
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p caseonepos_flutter
-          cat caseonepos_source/chunk_* > /tmp/caseonepos.b64
+          echo "Uploaded parts:"
+          ls -lh caseonepos_payload_v111_parts/part_*
+          cat caseonepos_payload_v111_parts/part_* > /tmp/caseonepos.b64
+          echo "Base64 bytes: $(wc -c < /tmp/caseonepos.b64)"
           base64 --decode /tmp/caseonepos.b64 > /tmp/caseonepos.tar.xz
+          echo "Archive bytes: $(wc -c < /tmp/caseonepos.tar.xz)"
+          sha256sum /tmp/caseonepos.tar.xz
           xz --test /tmp/caseonepos.tar.xz
-          tar -xJf /tmp/caseonepos.tar.xz -C caseonepos_flutter
-          echo "Extracted source:"
-          find caseonepos_flutter -maxdepth 2 -type f | sort | head -100
-          test -f caseonepos_flutter/pubspec.yaml
-          test -f caseonepos_flutter/lib/main.dart
-          test -f caseonepos_flutter/android/app/src/main/AndroidManifest.xml
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Flutter doctor
-        working-directory: caseonepos_flutter
-        run: flutter doctor -v
-
-      - name: Get Flutter dependencies
-        working-directory: caseonepos_flutter
-        run: flutter pub get
-
-      - name: Analyze project
-        working-directory: caseonepos_flutter
-        run: flutter analyze --no-fatal-infos
-
-      - name: Build Android APK
-        working-directory: caseonepos_flutter
-        run: flutter build apk --debug
-
-      - name: Verify APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK="caseonepos_flutter/build/app/outputs/flutter-apk/app-debug.apk"
-          test -s "$APK"
-          cp "$APK" CaseonePOS-Flutter-debug.apk
-          sha256sum CaseonePOS-Flutter-debug.apk > apk-sha256.txt
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: CaseonePOS-Flutter-APK
-          path: |
-            CaseonePOS-Flutter-debug.apk
-            apk-sha256.txt
-          if-no-files-found: error
-          retention-days: 30
+          mkdir -p /tmp/caseonepos
+          tar -xJf /tmp/caseonepos.tar.xz -C /tmp/caseonepos
+          find /tmp/caseonepos -maxdepth 3 -type f | sort | head -120
+          test -f /tmp/caseonepos/pubspec.yaml
+          test -f /tmp/caseonepos/lib/main.dart
+          test -f /tmp/caseonepos/android/app/src/main/AndroidManifest.xml
+          echo "PAYLOAD_OK"

@@ -1,0 +1,118 @@
+CaseonePOS payload diagnostic
+Commit: a0094261df63308ba79e30b24c748d46b1c816bb
+UTC: 2026-08-19T18:10:56Z
+
+===== caseonepos_core_v111 =====
+files=11
+  caseonepos_core_v111/part_000
+  caseonepos_core_v111/part_001
+  caseonepos_core_v111/part_001a
+  caseonepos_core_v111/part_002
+  caseonepos_core_v111/part_003
+  caseonepos_core_v111/part_004
+  caseonepos_core_v111/part_005
+  caseonepos_core_v111/part_006
+  caseonepos_core_v111/part_007
+  caseonepos_core_v111/part_008
+  caseonepos_core_v111/part_009
+base64_chars=184054
+result=base64_decode_failed
+base64: invalid input
+
+===== caseonepos_payload_v111_parts =====
+files=13
+  caseonepos_payload_v111_parts/part_000
+  caseonepos_payload_v111_parts/part_001
+  caseonepos_payload_v111_parts/part_002
+  caseonepos_payload_v111_parts/part_003
+  caseonepos_payload_v111_parts/part_004
+  caseonepos_payload_v111_parts/part_005
+  caseonepos_payload_v111_parts/part_006
+  caseonepos_payload_v111_parts/part_007
+  caseonepos_payload_v111_parts/part_008
+  caseonepos_payload_v111_parts/part_009
+  caseonepos_payload_v111_parts/part_010
+  caseonepos_payload_v111_parts/part_011
+  caseonepos_payload_v111_parts/part_012
+base64_chars=130000
+decoded_bytes=97500
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+===== caseonepos_ultra_parts =====
+files=9
+  caseonepos_ultra_parts/part_00
+  caseonepos_ultra_parts/part_01
+  caseonepos_ultra_parts/part_02
+  caseonepos_ultra_parts/part_03
+  caseonepos_ultra_parts/part_04
+  caseonepos_ultra_parts/part_05
+  caseonepos_ultra_parts/part_06a
+  caseonepos_ultra_parts/part_06b1
+  caseonepos_ultra_parts/part_07
+base64_chars=90000
+decoded_bytes=67500
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+===== caseonepos_code_payload_verified =====
+files=8
+  caseonepos_code_payload_verified/part_000
+  caseonepos_code_payload_verified/part_001
+  caseonepos_code_payload_verified/part_002
+  caseonepos_code_payload_verified/part_003
+  caseonepos_code_payload_verified/part_004
+  caseonepos_code_payload_verified/part_005
+  caseonepos_code_payload_verified/part_006
+  caseonepos_code_payload_verified/part_007
+base64_chars=160006
+result=base64_decode_failed
+base64: invalid input
+
+===== caseonepos_payload_clean =====
+files=3
+  caseonepos_payload_clean/part_000
+  caseonepos_payload_clean/part_001
+  caseonepos_payload_clean/part_002
+base64_chars=24000
+decoded_bytes=18000
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+===== caseonepos_payload_final =====
+files=7
+  caseonepos_payload_final/part_000
+  caseonepos_payload_final/part_001
+  caseonepos_payload_final/part_002
+  caseonepos_payload_final/part_003
+  caseonepos_payload_final/part_004
+  caseonepos_payload_final/part_005
+  caseonepos_payload_final/part_006
+base64_chars=140000
+decoded_bytes=105000
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+===== caseonepos_source =====
+files=5
+  caseonepos_source/chunk_000
+  caseonepos_source/chunk_001
+  caseonepos_source/chunk_002
+  caseonepos_source/chunk_003
+  caseonepos_source/chunk_004
+base64_chars=70000
+decoded_bytes=52500
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+===== caseonepos_code_parts =====
+files=2
+  caseonepos_code_parts/part_00
+  caseonepos_code_parts/part_01
+base64_chars=40000
+decoded_bytes=30000
+file_type=XZ compressed data, checksum CRC64
+archive=unsupported_or_corrupt
+
+
+SELECTED=

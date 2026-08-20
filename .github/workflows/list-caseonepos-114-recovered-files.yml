@@ -1,0 +1,48 @@
+name: List recovered CaseonePOS 1.1.4 files
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/list-caseonepos-114-recovered-files.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover prefix and list complete files
+        shell: bash
+        run: |
+          set -u
+          cat payload_1_1_4_v2/part_00.b64 payload_1_1_4_v2/part_01.b64 payload_1_1_4_v2/part_02.b64 payload_1_1_4_v2/part_03.b64 payload_1_1_4_v2/part_04.b64 payload_1_1_4_v2_fix/p05_0.b64 | tr -d '\r\n ' > "$RUNNER_TEMP/prefix.b64"
+          printf '==' >> "$RUNNER_TEMP/prefix.b64"
+          base64 -d "$RUNNER_TEMP/prefix.b64" > "$RUNNER_TEMP/prefix.xz"
+          set +e
+          xz -dc "$RUNNER_TEMP/prefix.xz" > "$RUNNER_TEMP/recovered.tar" 2>/dev/null
+          set -e
+          mkdir -p "$RUNNER_TEMP/src"
+          set +e
+          tar -xf "$RUNNER_TEMP/recovered.tar" -C "$RUNNER_TEMP/src" 2>/dev/null
+          set -e
+          cd "$RUNNER_TEMP/src"
+          {
+            echo 'Recovered complete files from truncated CaseonePOS 1.1.4 payload'
+            find . -type f -print0 | sort -z | while IFS= read -r -d '' f; do
+              printf '%s\t%s\t%s\n' "$(sha256sum "$f" | awk '{print $1}')" "$(wc -c < "$f")" "${f#./}"
+            done
+          } > "$GITHUB_WORKSPACE/caseonepos_1_1_4_recovered_files.txt"
+          cat "$GITHUB_WORKSPACE/caseonepos_1_1_4_recovered_files.txt"
+      - name: Save file list
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- caseonepos_1_1_4_recovered_files.txt
+          git commit -m 'CI: list recovered 1.1.4 files' || exit 0
+          git push origin HEAD:restore-caseonepos-1.1.4 || true

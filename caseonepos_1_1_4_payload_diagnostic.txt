@@ -1,0 +1,14 @@
+CaseonePOS 1.1.4 payload diagnostic
+payload_1_1_4_v2/part_00.b64: raw=20000 clean=20000 mod4=0 bad_count=0
+payload_1_1_4_v2/part_01.b64: raw=20000 clean=20000 mod4=0 bad_count=0
+payload_1_1_4_v2/part_02.b64: raw=20000 clean=20000 mod4=0 bad_count=0
+payload_1_1_4_v2/part_03.b64: raw=20000 clean=20000 mod4=0 bad_count=0
+payload_1_1_4_v2/part_04.b64: raw=20000 clean=20000 mod4=0 bad_count=0
+payload_1_1_4_v2/part_05.b64: raw=9985 clean=9985 mod4=1 bad_count=4
+ bad_first= [(9962, "'['"), (9972, "'_'"), (9976, "'_'"), (9984, "']'")]
+total_clean=109985 mod4=1 total_bad=4
+total_bad_first= [(109962, "'['"), (109972, "'_'"), (109976, "'_'"), (109984, "']'")]
+context@109962='HX0zwEjCTFLpW7gTgvGe4Pv7NebnBJgx3ARKaByI[TRUNCATED_FOR_BREVITY]'
+context@109972='LpW7gTgvGe4Pv7NebnBJgx3ARKaByI[TRUNCATED_FOR_BREVITY]'
+context@109976='gTgvGe4Pv7NebnBJgx3ARKaByI[TRUNCATED_FOR_BREVITY]'
+context@109984='v7NebnBJgx3ARKaByI[TRUNCATED_FOR_BREVITY]'

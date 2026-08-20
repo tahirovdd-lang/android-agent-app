@@ -1,13 +1,13 @@
 CaseonePOS Flutter build report
-source_commit=4c1dd723a88e27781cf3739a05df8da149ae2efe
-run_id=32328608254
+source_commit=fad3414e742f2a2d1239202a1dc79662fa9e0bbe
+run_id=32329239540
 job_status=failure
-restore=failure
-assets=skipped
-flutter_setup=skipped
-wrapper=skipped
-branding=skipped
-pub_get=skipped
-apk_build=skipped
+restore=success
+assets=success
+flutter_setup=success
+wrapper=success
+branding=success
+pub_get=success
+apk_build=failure
 artifact=skipped
 apk_present=no

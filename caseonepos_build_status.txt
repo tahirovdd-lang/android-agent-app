@@ -1,5 +1,5 @@
 CaseonePOS APK build report
-run_id=32341037833
+run_id=32341009465
 job_status=success
 restore=success
 flutter=success
@@ -10,4 +10,4 @@ apk_build=success
 artifact=success
 apk_present=yes
 apk_size=166337843
-f0a949b0ddd109140e7c4fc86e498714cd9d35deb8204aaeed339668269a8898  CaseonePOS-1.1.1.apk
+5d9aff13a37c41db808f7c08396d108c79027b8206941a38bc99f326b54d7e31  CaseonePOS-1.1.1.apk

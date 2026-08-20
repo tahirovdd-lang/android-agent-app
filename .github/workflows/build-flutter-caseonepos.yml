@@ -1,219 +1,85 @@
-name: Build CaseonePOS Flutter APK
+name: Diagnose CaseonePOS Flutter core
 
 on:
   push:
     branches: [flutter-source-import]
     paths:
       - '.github/workflows/build-flutter-caseonepos.yml'
-      - 'caseonepos_*/*'
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
+  diagnose:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: flutter-source-import
 
-      - name: Detect valid Flutter payload and write report
-        id: detect
+      - name: Test core combinations
         shell: bash
         run: |
           set -u
-          rm -rf /tmp/caseone_detect /tmp/caseone_src
-          mkdir -p /tmp/caseone_detect /tmp/caseone_src
-          report="$GITHUB_WORKSPACE/ci_payload_report.txt"
+          report="$GITHUB_WORKSPACE/ci_core_variant_report.txt"
           : > "$report"
-          echo "CaseonePOS payload diagnostic" >> "$report"
-          echo "Commit: $GITHUB_SHA" >> "$report"
-          echo "UTC: $(date -u +%FT%TZ)" >> "$report"
-          echo >> "$report"
-
-          candidates=(
-            caseonepos_core_v111
-            caseonepos_payload_v111_parts
-            caseonepos_ultra_parts
-            caseonepos_code_payload_verified
-            caseonepos_payload_clean
-            caseonepos_payload_final
-            caseonepos_source
-            caseonepos_code_parts
-          )
-
-          chosen=''
-          for dir in "${candidates[@]}"; do
-            [ -d "$dir" ] || continue
-            echo "===== $dir =====" | tee -a "$report"
-            mapfile -t files < <(find "$dir" -maxdepth 1 -type f | sort -V)
-            echo "files=${#files[@]}" | tee -a "$report"
-            [ "${#files[@]}" -gt 0 ] || continue
-            printf '%s\n' "${files[@]}" | sed 's/^/  /' >> "$report"
-
-            cat "${files[@]}" | tr -d '\r\n ' > /tmp/caseone_detect/payload.b64
-            chars=$(wc -c < /tmp/caseone_detect/payload.b64)
-            echo "base64_chars=$chars" | tee -a "$report"
-
-            if ! base64 -d /tmp/caseone_detect/payload.b64 > /tmp/caseone_detect/payload.bin 2>/tmp/caseone_detect/base64.err; then
-              echo "result=base64_decode_failed" | tee -a "$report"
-              cat /tmp/caseone_detect/base64.err >> "$report" || true
+          test_variant() {
+            name="$1"; shift
+            echo "===== $name =====" | tee -a "$report"
+            cat "$@" | tr -d '\r\n ' > /tmp/payload.b64
+            echo "base64_chars=$(wc -c < /tmp/payload.b64)" | tee -a "$report"
+            if ! base64 -d /tmp/payload.b64 > /tmp/payload.bin 2>/tmp/b64.err; then
+              echo "base64=INVALID" | tee -a "$report"
+              cat /tmp/b64.err >> "$report" || true
               echo >> "$report"
-              continue
+              return
             fi
-
-            echo "decoded_bytes=$(wc -c < /tmp/caseone_detect/payload.bin)" | tee -a "$report"
-            echo "file_type=$(file -b /tmp/caseone_detect/payload.bin)" | tee -a "$report"
-
-            rm -rf /tmp/caseone_detect/extract
-            mkdir -p /tmp/caseone_detect/extract
-            extracted=0
-
-            if xz -t /tmp/caseone_detect/payload.bin >/dev/null 2>&1; then
-              echo "xz=valid" | tee -a "$report"
-              if xz -dc /tmp/caseone_detect/payload.bin | tar -tf - > /tmp/caseone_detect/list.txt 2>/tmp/caseone_detect/tar.err; then
-                xz -dc /tmp/caseone_detect/payload.bin | tar -xf - -C /tmp/caseone_detect/extract
-                extracted=1
+            echo "decoded_bytes=$(wc -c < /tmp/payload.bin)" | tee -a "$report"
+            echo "file=$(file -b /tmp/payload.bin)" | tee -a "$report"
+            if xz -t /tmp/payload.bin >/dev/null 2>&1; then
+              echo "xz=VALID" | tee -a "$report"
+              if xz -dc /tmp/payload.bin | tar -tf - >/tmp/list.txt 2>/tmp/tar.err; then
+                echo "tar=VALID" | tee -a "$report"
+                grep -E '(^|/)pubspec.yaml$|(^|/)lib/main.dart$|(^|/)android/' /tmp/list.txt | head -40 >> "$report" || true
               else
-                echo "tar=invalid" | tee -a "$report"
-                cat /tmp/caseone_detect/tar.err >> "$report" || true
+                echo "tar=INVALID" | tee -a "$report"
+                cat /tmp/tar.err >> "$report" || true
               fi
-            elif unzip -t /tmp/caseone_detect/payload.bin >/dev/null 2>&1; then
-              echo "zip=valid" | tee -a "$report"
-              unzip -q /tmp/caseone_detect/payload.bin -d /tmp/caseone_detect/extract
-              extracted=1
             else
-              echo "archive=unsupported_or_corrupt" | tee -a "$report"
-            fi
-
-            if [ "$extracted" -eq 1 ]; then
-              echo "archive_preview:" >> "$report"
-              find /tmp/caseone_detect/extract -maxdepth 3 -type f | sort | head -80 | sed 's/^/  /' >> "$report"
-              pubspec=$(find /tmp/caseone_detect/extract -name pubspec.yaml -type f | head -1 || true)
-              main=$(find /tmp/caseone_detect/extract -path '*/lib/main.dart' -type f | head -1 || true)
-              echo "pubspec=$pubspec" | tee -a "$report"
-              echo "main=$main" | tee -a "$report"
-              if [ -n "$pubspec" ] && [ -n "$main" ]; then
-                project_dir=$(dirname "$pubspec")
-                cp -a "$project_dir/." /tmp/caseone_src/
-                chosen="$dir"
-                echo "result=VALID_FLUTTER_PROJECT" | tee -a "$report"
-                echo "project_dir=$project_dir" | tee -a "$report"
-                break
-              else
-                echo "result=archive_valid_but_not_flutter_project" | tee -a "$report"
-              fi
+              echo "xz=INVALID" | tee -a "$report"
             fi
             echo >> "$report"
-          done
+          }
 
-          echo >> "$report"
-          echo "SELECTED=$chosen" | tee -a "$report"
-          if [ -n "$chosen" ]; then
-            echo "CASEONE_PAYLOAD=$chosen" >> "$GITHUB_ENV"
-            echo "CASEONE_SRC=/tmp/caseone_src" >> "$GITHUB_ENV"
-            echo "valid=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "valid=false" >> "$GITHUB_OUTPUT"
-          fi
+          common_after=(
+            caseonepos_core_v111/part_002
+            caseonepos_core_v111/part_003
+            caseonepos_core_v111/part_004
+            caseonepos_core_v111/part_005
+            caseonepos_core_v111/part_006
+            caseonepos_core_v111/part_007
+            caseonepos_core_v111/part_008
+            caseonepos_core_v111/part_009
+          )
+
+          test_variant "with_part_001" \
+            caseonepos_core_v111/part_000 \
+            caseonepos_core_v111/part_001 \
+            "${common_after[@]}"
+
+          test_variant "with_part_001a" \
+            caseonepos_core_v111/part_000 \
+            caseonepos_core_v111/part_001a \
+            "${common_after[@]}"
 
       - name: Commit diagnostic report
         shell: bash
         run: |
-          set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ci_payload_report.txt
+          git add ci_core_variant_report.txt
           if ! git diff --cached --quiet; then
-            git commit -m "CI: record CaseonePOS payload diagnostic"
+            git commit -m "CI: record core variant diagnostic"
             git push origin HEAD:flutter-source-import
           fi
-
-      - name: Stop if no valid Flutter payload
-        if: steps.detect.outputs.valid != 'true'
-        run: |
-          echo "No valid Flutter payload was found. See ci_payload_report.txt"
-          exit 1
-
-      - name: Prepare CaseonePOS assets
-        if: steps.detect.outputs.valid == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          mkdir -p assets/images assets/fonts
-          fallback="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
-          if [ ! -s assets/images/logo.png ] && [ -s "$fallback" ]; then cp "$fallback" assets/images/logo.png; fi
-          if [ ! -s assets/images/logo_icon.png ] && [ -s "$fallback" ]; then cp "$fallback" assets/images/logo_icon.png; fi
-          test -s assets/images/logo.png
-          test -s assets/images/logo_icon.png
-          file assets/images/logo.png assets/images/logo_icon.png
-
-      - name: Setup Flutter
-        if: steps.detect.outputs.valid == 'true'
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-
-      - name: Generate Android project if missing
-        if: steps.detect.outputs.valid == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          flutter --version
-          if [ ! -d android ]; then
-            flutter create --platforms=android --org com.artdom --project-name caseonepos .
-          fi
-
-      - name: Apply CaseonePOS Android branding
-        if: steps.detect.outputs.valid == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          manifest=android/app/src/main/AndroidManifest.xml
-          sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$manifest"
-          mkdir -p android/app/src/main/res/drawable
-          cp assets/images/logo_icon.png android/app/src/main/res/drawable/caseonepos_logo.png
-          if grep -q 'android:icon=' "$manifest"; then
-            sed -i 's#android:icon="@[^"]*"#android:icon="@drawable/caseonepos_logo"#' "$manifest"
-          else
-            sed -i 's#<application#<application android:icon="@drawable/caseonepos_logo"#' "$manifest"
-          fi
-          grep -n 'android:label\|android:icon' "$manifest"
-
-      - name: Resolve dependencies
-        if: steps.detect.outputs.valid == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          flutter pub get
-
-      - name: Build debug APK
-        if: steps.detect.outputs.valid == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          flutter build apk --debug
-          test -s build/app/outputs/flutter-apk/app-debug.apk
-          cp build/app/outputs/flutter-apk/app-debug.apk "$GITHUB_WORKSPACE/CaseonePOS-debug.apk"
-          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-debug.sha256"
-
-      - name: Upload CaseonePOS APK
-        if: steps.detect.outputs.valid == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: CaseonePOS-Flutter-APK
-          path: |
-            CaseonePOS-debug.apk
-            CaseonePOS-debug.sha256
-            ci_payload_report.txt
-          if-no-files-found: error

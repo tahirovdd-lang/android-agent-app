@@ -1,0 +1,84 @@
+name: Build CaseonePOS 1.1.4 Final
+on:
+  push:
+    branches: [caseonepos-1.1.4-final]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: caseonepos-1.1.4-final
+      - name: Restore 1.1.4 source
+        id: restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/caseonepos114"
+          mkdir -p "$SRC"
+          tr -d '\r\n ' < payload_1_1_4/core.b64 > "$RUNNER_TEMP/core.b64"
+          base64 -d "$RUNNER_TEMP/core.b64" > "$RUNNER_TEMP/core.tar.xz"
+          echo '1d4f1884ab683b0c3aa6521a91a35638ce0ac97bb2eac27228c24f35fa31e84e  '"$RUNNER_TEMP/core.tar.xz" | sha256sum -c -
+          xz -t "$RUNNER_TEMP/core.tar.xz"
+          tar -xJf "$RUNNER_TEMP/core.tar.xz" -C "$SRC"
+          test -s "$SRC/lib/main.dart"
+          test -s "$SRC/android/app/build.gradle"
+          grep -q 'version: 1.1.4+13' "$SRC/pubspec.yaml"
+          echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Prepare Android
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          mkdir -p assets/images assets/fonts
+          LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
+          test -s "$LOGO"
+          cp "$LOGO" assets/images/logo.png
+          cp "$LOGO" assets/images/logo_icon.png
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$M"
+          grep -q 'android.permission.INTERNET' "$M" || sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$M"
+          grep -q 'usesCleartextTraffic' "$M" || sed -i 's#<application#<application android:usesCleartextTraffic="true"#' "$M"
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do mkdir -p "android/app/src/main/res/mipmap-$d"; cp "$LOGO" "android/app/src/main/res/mipmap-$d/ic_launcher.png"; done
+          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/drawable-v21 android/app/src/main/res/values-v31
+          cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
+          cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android"><item android:drawable="@android:color/white"/><item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo"/></item></layer-list>
+          XML
+          cp android/app/src/main/res/drawable/launch_background.xml android/app/src/main/res/drawable-v21/launch_background.xml
+          cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
+          <resources><style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar"><item name="android:windowSplashScreenBackground">#FFFFFF</item><item name="android:windowSplashScreenAnimatedIcon">@drawable/caseonepos_logo</item><item name="android:windowSplashScreenIconBackgroundColor">#FFFFFF</item></style><style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar"><item name="android:windowBackground">?android:colorBackground</item></style></resources>
+          XML
+          sed -i -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 36/' android/app/build.gradle
+      - name: Dependencies
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter pub get
+          PICKER="$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit)"
+          test -n "$PICKER"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/; s/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/; s/compileSdk[[:space:]]+[0-9]+/compileSdk 36/' "$PICKER"
+      - name: Build APK
+        id: apk
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter build apk --debug
+          test -s build/app/outputs/flutter-apk/app-debug.apk
+          cp build/app/outputs/flutter-apk/app-debug.apk "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.apk"
+          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CaseonePOS-1.1.4-APK
+          path: |
+            CaseonePOS-1.1.4.apk
+            CaseonePOS-1.1.4.sha256
+          retention-days: 30

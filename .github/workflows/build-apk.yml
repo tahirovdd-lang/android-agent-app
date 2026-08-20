@@ -165,3 +165,38 @@ jobs:
             CaseonePOS-1.1.1.sha256
           retention-days: 30
           if-no-files-found: error
+
+      - name: Record build result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "CaseonePOS APK build report"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "job_status=${{ job.status }}"
+            echo "restore=${{ steps.restore.outcome }}"
+            echo "flutter=${{ steps.flutter.outcome }}"
+            echo "wrapper=${{ steps.wrapper.outcome }}"
+            echo "branding=${{ steps.branding.outcome }}"
+            echo "dependencies=${{ steps.deps.outcome }}"
+            echo "apk_build=${{ steps.apk.outcome }}"
+            echo "artifact=${{ steps.artifact.outcome }}"
+            if [ -s CaseonePOS-1.1.1.apk ]; then
+              echo "apk_present=yes"
+              echo "apk_size=$(wc -c < CaseonePOS-1.1.1.apk)"
+              sha256sum CaseonePOS-1.1.1.apk
+            else
+              echo "apk_present=no"
+            fi
+          } > caseonepos_build_status.txt
+          CONTENT=$(base64 -w0 caseonepos_build_status.txt)
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt?ref=main" --jq .sha 2>/dev/null || true)
+          if [ -n "$SHA" ]; then
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt" -f message='CI: update CaseonePOS APK build status' -f content="$CONTENT" -f branch=main -f sha="$SHA" >/dev/null || true
+          else
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt" -f message='CI: add CaseonePOS APK build status' -f content="$CONTENT" -f branch=main >/dev/null || true
+          fi

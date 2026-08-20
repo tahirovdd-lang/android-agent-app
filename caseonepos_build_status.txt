@@ -1,0 +1,11 @@
+CaseonePOS APK build report
+run_id=32332134772
+job_status=failure
+restore=success
+flutter=success
+wrapper=success
+branding=success
+dependencies=success
+apk_build=failure
+artifact=skipped
+apk_present=no

@@ -1,0 +1,1 @@
+CaseonePOS 1.1.4 verified payload chunks. Source SHA-256 d399d387f69fd2e346e13aa57ba60095453f6ad26e737c666cb1a2a9824661e8

@@ -1,0 +1,55 @@
+name: Check existing CaseonePOS payloads
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/check-existing-caseonepos-payloads.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test payload candidates
+        shell: bash
+        run: |
+          set +e
+          OUT=caseonepos_existing_payloads_check.txt
+          : > "$OUT"
+          testset() {
+            NAME="$1"; shift
+            B64="$RUNNER_TEMP/$NAME.b64"; XZ="$RUNNER_TEMP/$NAME.xz"; DIR="$RUNNER_TEMP/$NAME-dir"
+            cat "$@" | tr -d '\r\n ' > "$B64"
+            echo "[$NAME] b64=$(wc -c < "$B64") mod4=$(( $(wc -c < "$B64") % 4 ))" >> "$OUT"
+            base64 -d "$B64" > "$XZ" 2>"$RUNNER_TEMP/$NAME-b64.err"; echo "base64_rc=$? err=$(tr '\n' ' ' < "$RUNNER_TEMP/$NAME-b64.err")" >> "$OUT"
+            xz -t "$XZ" 2>"$RUNNER_TEMP/$NAME-xz.err"; echo "xz_rc=$? bytes=$(wc -c < "$XZ") err=$(tr '\n' ' ' < "$RUNNER_TEMP/$NAME-xz.err")" >> "$OUT"
+            mkdir -p "$DIR"
+            tar -xJf "$XZ" -C "$DIR" 2>"$RUNNER_TEMP/$NAME-tar.err"; echo "tar_rc=$? err=$(tr '\n' ' ' < "$RUNNER_TEMP/$NAME-tar.err")" >> "$OUT"
+            PUBSPEC=$(find "$DIR" -maxdepth 5 -name pubspec.yaml -print -quit)
+            echo "pubspec=$PUBSPEC" >> "$OUT"
+            if [ -n "$PUBSPEC" ]; then
+              SRC=$(dirname "$PUBSPEC")
+              grep '^version:' "$SRC/pubspec.yaml" >> "$OUT" || true
+              for f in lib/main.dart lib/services/backup_service.dart lib/screens/system_settings_screen.dart; do
+                if [ -f "$SRC/$f" ]; then echo "$f=$(sha256sum "$SRC/$f" | awk '{print $1}')" >> "$OUT"; else echo "$f=missing" >> "$OUT"; fi
+              done
+            fi
+          }
+          testset flutter caseonepos_flutter/part_000 caseonepos_flutter/part_001 caseonepos_flutter/part_002 caseonepos_flutter/part_003 caseonepos_flutter/part_004
+          testset source caseonepos_source/chunk_000 caseonepos_source/chunk_001 caseonepos_source/chunk_002 caseonepos_source/chunk_003 caseonepos_source/chunk_004
+          testset combined caseonepos_flutter/part_000 caseonepos_flutter/part_001 caseonepos_flutter/part_002 caseonepos_flutter/part_003 caseonepos_flutter/part_004 caseonepos_source/chunk_000 caseonepos_source/chunk_001 caseonepos_source/chunk_002 caseonepos_source/chunk_003 caseonepos_source/chunk_004
+          cat "$OUT"
+      - name: Save report
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- caseonepos_existing_payloads_check.txt
+          git commit -m 'CI: check existing CaseonePOS payloads' || exit 0
+          git push origin HEAD:restore-caseonepos-1.1.4 || true

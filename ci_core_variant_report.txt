@@ -1,0 +1,11 @@
+===== with_part_001 =====
+base64_chars=174152
+decoded_bytes=130612
+file=XZ compressed data, checksum CRC64
+xz=INVALID
+
+===== with_part_001a =====
+base64_chars=170230
+base64=INVALID
+base64: invalid input
+

@@ -1,0 +1,50 @@
+name: List more recovered CaseonePOS files
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/list-more-caseonepos-recovered-files.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  list:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract partial payloads
+        shell: bash
+        run: |
+          set +e
+          OUT=caseonepos_more_recovered_files.txt
+          : > "$OUT"
+          recover() {
+            NAME="$1"; shift
+            B64="$RUNNER_TEMP/$NAME.b64"; XZ="$RUNNER_TEMP/$NAME.xz"; TAR="$RUNNER_TEMP/$NAME.tar"; DIR="$RUNNER_TEMP/$NAME-dir"
+            cat "$@" | tr -d '\r\n ' > "$B64"
+            base64 -d "$B64" > "$XZ" 2>/dev/null
+            xz -dc "$XZ" > "$TAR" 2>/dev/null
+            mkdir -p "$DIR"
+            tar -xf "$TAR" -C "$DIR" 2>/dev/null
+            echo "[$NAME] xz=$(wc -c < "$XZ") tar=$(wc -c < "$TAR")" >> "$OUT"
+            cd "$DIR"
+            find . -type f -print0 | sort -z | while IFS= read -r -d '' f; do
+              printf '%s\t%s\t%s\n' "$(sha256sum "$f" | awk '{print $1}')" "$(wc -c < "$f")" "${f#./}" >> "$GITHUB_WORKSPACE/$OUT"
+            done
+            cd "$GITHUB_WORKSPACE"
+          }
+          recover source caseonepos_source/chunk_000 caseonepos_source/chunk_001 caseonepos_source/chunk_002 caseonepos_source/chunk_003 caseonepos_source/chunk_004
+          recover flutter caseonepos_flutter/part_000 caseonepos_flutter/part_001 caseonepos_flutter/part_002 caseonepos_flutter/part_003 caseonepos_flutter/part_004
+          cat "$OUT"
+      - name: Save report
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- caseonepos_more_recovered_files.txt
+          git commit -m 'CI: list additional recovered CaseonePOS files' || exit 0
+          git push origin HEAD:restore-caseonepos-1.1.4 || true

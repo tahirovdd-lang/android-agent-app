@@ -5,7 +5,7 @@ on:
     branches: [flutter-source-import]
     paths:
       - '.github/workflows/build-flutter-caseonepos.yml'
-      - 'flutter_payload_v4/**'
+      - 'flutter_payload_v5/**'
   workflow_dispatch:
 
 permissions:
@@ -30,10 +30,30 @@ jobs:
           SRC="$RUNNER_TEMP/caseonepos"
           rm -rf "$SRC"
           mkdir -p "$SRC"
-          base64 -d flutter_payload_v4/core_only.b64 > "$RUNNER_TEMP/core_only.tar.xz"
+
+          cat \
+            flutter_payload_v5/part_00 \
+            flutter_payload_v5/part_01 \
+            flutter_payload_v5/part_02_03 \
+            flutter_payload_v5/part_04_05 \
+            flutter_payload_v5/part_06_07 \
+            flutter_payload_v5/part_08_09 \
+            flutter_payload_v5/part_10_11 \
+            flutter_payload_v5/part_12_13 \
+            flutter_payload_v5/part_14_15 \
+            flutter_payload_v5/part_16_17 \
+            flutter_payload_v5/part_18 \
+            | tr -d '\r\n ' > "$RUNNER_TEMP/core_only.b64"
+
+          CHARS=$(wc -c < "$RUNNER_TEMP/core_only.b64")
+          echo "Base64 characters: $CHARS"
+          test "$CHARS" -eq 186104
+
+          base64 -d "$RUNNER_TEMP/core_only.b64" > "$RUNNER_TEMP/core_only.tar.xz"
           echo 'd9cbd6fe265b51bc8d3ecd3266233fcf92c57e283fcc03fdb732c8ba693fe47b  '"$RUNNER_TEMP/core_only.tar.xz" | sha256sum -c -
           xz -t "$RUNNER_TEMP/core_only.tar.xz"
           xz -dc "$RUNNER_TEMP/core_only.tar.xz" | tar -xf - -C "$SRC"
+
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
@@ -78,26 +98,33 @@ jobs:
           cd "$CASEONE_SRC"
           MANIFEST=android/app/src/main/AndroidManifest.xml
           LOGO=assets/images/logo_icon.png
+
           sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
+
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+
           for dir in android/app/src/main/res/mipmap-*dpi; do
             [ -d "$dir" ] || continue
             cp "$LOGO" "$dir/ic_launcher.png"
             cp "$LOGO" "$dir/ic_launcher_round.png"
           done
+
           mkdir -p android/app/src/main/res/drawable
           cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
+
           if grep -q 'android:icon=' "$MANIFEST"; then
             sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
           else
             sed -i 's#<application#<application android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
           fi
+
           if grep -q 'android:roundIcon=' "$MANIFEST"; then
             sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           else
             sed -i 's#<application#<application android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           fi
+
           cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
@@ -107,6 +134,7 @@ jobs:
               </item>
           </layer-list>
           XML
+
           mkdir -p android/app/src/main/res/values-v31
           cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
@@ -124,6 +152,7 @@ jobs:
               </style>
           </resources>
           XML
+
           echo '--- Manifest branding ---'
           grep -n 'application\|label\|icon\|roundIcon' "$MANIFEST" | head -20
           test "$(grep -c 'android:label="CaseonePOS"' "$MANIFEST")" -ge 1

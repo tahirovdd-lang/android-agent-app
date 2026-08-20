@@ -1,0 +1,10 @@
+CaseonePOS 1.1.4 restoration report
+run_id=32392279400
+job_status=failure
+verify=failure
+flutter=skipped
+prepare=skipped
+dependencies=skipped
+apk_build=skipped
+artifact=skipped
+apk_present=no

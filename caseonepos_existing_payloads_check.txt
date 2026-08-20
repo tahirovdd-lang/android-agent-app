@@ -1,0 +1,15 @@
+[flutter] b64=100000 mod4=0
+base64_rc=0 err=
+xz_rc=1 bytes=75000 err=xz: /home/runner/work/_temp/flutter.xz: Compressed data is corrupt 
+tar_rc=2 err=xz: (stdin): Compressed data is corrupt tar: Child returned status 1 tar: Error is not recoverable: exiting now 
+pubspec=
+[source] b64=70000 mod4=0
+base64_rc=0 err=
+xz_rc=1 bytes=52500 err=xz: /home/runner/work/_temp/source.xz: Unexpected end of input 
+tar_rc=2 err=xz: (stdin): Unexpected end of input tar: Unexpected EOF in archive tar: Unexpected EOF in archive tar: Error is not recoverable: exiting now 
+pubspec=
+[combined] b64=170000 mod4=0
+base64_rc=0 err=
+xz_rc=1 bytes=127500 err=xz: /home/runner/work/_temp/combined.xz: Compressed data is corrupt 
+tar_rc=2 err=xz: (stdin): Compressed data is corrupt tar: Child returned status 1 tar: Error is not recoverable: exiting now 
+pubspec=

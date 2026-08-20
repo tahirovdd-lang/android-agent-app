@@ -149,19 +149,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$(find "$SDK_ROOT" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          test -n "$SDKMANAGER"
+          chmod +x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+
           cd "$CASEONE_SRC"
           APP_GRADLE=android/app/build.gradle.kts
-          if [ -f "$APP_GRADLE" ]; then
-            sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
-            sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
-          fi
-          PICKER=$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit)
+          sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
+          sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
+          grep -n 'compileSdk' "$APP_GRADLE"
+
+          PICKER="$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit)"
           test -n "$PICKER"
           sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$PICKER"
           sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/' "$PICKER"
-          grep -n 'compileSdk' "$PICKER" || true
+          grep -n 'compileSdk' "$PICKER"
 
       - name: Build debug APK
         id: apk
@@ -174,6 +179,7 @@ jobs:
           test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
           sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.sha256"
+          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
 
       - name: Upload CaseonePOS APK
         id: artifact

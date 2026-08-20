@@ -1,0 +1,10 @@
+CaseonePOS 1.1.4 final build
+run_id=32345730318
+job_status=failure
+restore=failure
+flutter=skipped
+android=skipped
+dependencies=skipped
+apk_build=skipped
+artifact=skipped
+apk_present=no

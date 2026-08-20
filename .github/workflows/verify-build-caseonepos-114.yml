@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify-build:
@@ -55,15 +55,16 @@ jobs:
           echo '5250fd05146806860261050982a6633433fc606e38c4ca81a521c8ee2cf0d3d0  '"$SRC/lib/screens/system_settings_screen.dart" | sha256sum -c -
 
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
-          echo "Verified exact CaseonePOS 1.1.4+13 source" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Flutter
+        id: flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Prepare Android project and assets
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
@@ -93,6 +94,7 @@ jobs:
           sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
 
       - name: Resolve dependencies
+        id: deps
         shell: bash
         run: |
           set -euo pipefail
@@ -106,6 +108,7 @@ jobs:
           fi
 
       - name: Build CaseonePOS 1.1.4 APK
+        id: build
         shell: bash
         run: |
           set -euo pipefail
@@ -117,6 +120,7 @@ jobs:
           sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.4-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.4-debug.sha256"
 
       - name: Upload APK artifact
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: CaseonePOS-1.1.4-APK
@@ -125,3 +129,42 @@ jobs:
             CaseonePOS-1.1.4-debug.sha256
           retention-days: 30
           if-no-files-found: error
+
+      - name: Record restoration result
+        if: always()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo 'CaseonePOS 1.1.4 restoration report'
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "job_status=${{ job.status }}"
+            echo "verify=${{ steps.verify.outcome }}"
+            echo "flutter=${{ steps.flutter.outcome }}"
+            echo "prepare=${{ steps.prepare.outcome }}"
+            echo "dependencies=${{ steps.deps.outcome }}"
+            echo "apk_build=${{ steps.build.outcome }}"
+            echo "artifact=${{ steps.artifact.outcome }}"
+            if [ -s CaseonePOS-1.1.4-debug.apk ]; then
+              echo 'apk_present=yes'
+              echo "apk_size=$(wc -c < CaseonePOS-1.1.4-debug.apk)"
+              sha256sum CaseonePOS-1.1.4-debug.apk
+            else
+              echo 'apk_present=no'
+            fi
+          } > caseonepos_1_1_4_restore_status.txt
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin restore-caseonepos-1.1.4
+          git checkout restore-caseonepos-1.1.4
+          git pull --ff-only origin restore-caseonepos-1.1.4 || true
+          cp "$GITHUB_WORKSPACE/caseonepos_1_1_4_restore_status.txt" ./caseonepos_1_1_4_restore_status.txt
+          git add -- caseonepos_1_1_4_restore_status.txt
+          if ! git diff --cached --quiet; then
+            git commit -m 'CI: record CaseonePOS 1.1.4 restoration status'
+            git push origin HEAD:restore-caseonepos-1.1.4 || true
+          fi

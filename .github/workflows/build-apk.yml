@@ -1,8 +1,11 @@
-name: Build CaseonePOS APK
+name: Build CaseonePOS 1.1.4 APK
 
 on:
   push:
     branches: [main]
+    paths:
+      - '.github/workflows/build-apk.yml'
+      - 'payload_1_1_4/**'
   workflow_dispatch:
 
 permissions:
@@ -14,44 +17,27 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout CaseonePOS Flutter source
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: flutter-source-import
+          ref: main
 
-      - name: Restore verified source
+      - name: Restore verified CaseonePOS 1.1.4 source
         id: restore
         shell: bash
         run: |
           set -euo pipefail
-          SRC="$RUNNER_TEMP/caseonepos"
+          SRC="$RUNNER_TEMP/caseonepos114"
           rm -rf "$SRC" && mkdir -p "$SRC"
-          cat \
-            flutter_payload_v5/part_00 \
-            flutter_payload_v5/part_01 \
-            flutter_payload_v5/part_02_03 \
-            flutter_payload_v5/part_04_05 \
-            flutter_payload_v5_fix/p06_0 \
-            flutter_payload_v5_fix/p06_1 \
-            flutter_payload_v5_fix/p07_0 \
-            flutter_payload_v5_fix/p07_1 \
-            flutter_payload_v5/part_08_09 \
-            flutter_payload_v5/part_10_11 \
-            flutter_payload_v5_fix/p12_0 \
-            flutter_payload_v5_fix/p12_1 \
-            flutter_payload_v5_fix/p13_0 \
-            flutter_payload_v5_fix/p13_1 \
-            flutter_payload_v5/part_14_15 \
-            flutter_payload_v5/part_16_17 \
-            flutter_payload_v5/part_18 \
-            | tr -d '\r\n ' > "$RUNNER_TEMP/core_only.b64"
-          test "$(wc -c < "$RUNNER_TEMP/core_only.b64")" -eq 186104
-          base64 -d "$RUNNER_TEMP/core_only.b64" > "$RUNNER_TEMP/core_only.tar.xz"
-          echo 'd9cbd6fe265b51bc8d3ecd3266233fcf92c57e283fcc03fdb732c8ba693fe47b  '"$RUNNER_TEMP/core_only.tar.xz" | sha256sum -c -
-          xz -t "$RUNNER_TEMP/core_only.tar.xz"
-          xz -dc "$RUNNER_TEMP/core_only.tar.xz" | tar -xf - -C "$SRC"
+          tr -d '\r\n ' < payload_1_1_4/core.b64 > "$RUNNER_TEMP/caseonepos114.b64"
+          base64 -d "$RUNNER_TEMP/caseonepos114.b64" > "$RUNNER_TEMP/caseonepos114.tar.xz"
+          echo '1d4f1884ab683b0c3aa6521a91a35638ce0ac97bb2eac27228c24f35fa31e84e  '"$RUNNER_TEMP/caseonepos114.tar.xz" | sha256sum -c -
+          xz -t "$RUNNER_TEMP/caseonepos114.tar.xz"
+          tar -xJf "$RUNNER_TEMP/caseonepos114.tar.xz" -C "$SRC"
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
+          test -s "$SRC/android/app/build.gradle"
+          grep -q 'version: 1.1.4+13' "$SRC/pubspec.yaml"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
 
       - name: Setup Flutter
@@ -61,43 +47,37 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android project
-        id: wrapper
+      - name: Prepare Android 1.1.4
+        id: android
         shell: bash
         run: |
           set -euo pipefail
           cd "$CASEONE_SRC"
-          flutter create --platforms=android --org uz.caseonepos --project-name caseonepos .
 
-      - name: Apply CaseonePOS branding
-        id: branding
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$CASEONE_SRC"
-          mkdir -p assets/images assets/fonts
           LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
           test -s "$LOGO"
+          mkdir -p assets/images assets/fonts
           cp "$LOGO" assets/images/logo.png
           cp "$LOGO" assets/images/logo_icon.png
 
           MANIFEST=android/app/src/main/AndroidManifest.xml
           sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
-          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-          for dir in android/app/src/main/res/mipmap-*dpi; do
-            [ -d "$dir" ] || continue
-            cp "$LOGO" "$dir/ic_launcher.png"
-            cp "$LOGO" "$dir/ic_launcher_round.png"
-          done
-          mkdir -p android/app/src/main/res/drawable
-          cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
-          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
-          if grep -q 'android:roundIcon=' "$MANIFEST"; then
-            sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
-          else
-            sed -i 's#<application#<application android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
+          fi
+          if grep -q '<application' "$MANIFEST" && ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+            sed -i 's#<application#<application android:usesCleartextTraffic="true"#' "$MANIFEST"
           fi
 
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "android/app/src/main/res/mipmap-$d"
+            cp "$LOGO" "android/app/src/main/res/mipmap-$d/ic_launcher.png"
+          done
+          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
+
+          mkdir -p android/app/src/main/res/drawable
+          cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
           cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
@@ -105,6 +85,8 @@ jobs:
               <item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" /></item>
           </layer-list>
           XML
+          mkdir -p android/app/src/main/res/drawable-v21
+          cp android/app/src/main/res/drawable/launch_background.xml android/app/src/main/res/drawable-v21/launch_background.xml
 
           mkdir -p android/app/src/main/res/values-v31
           cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
@@ -123,11 +105,12 @@ jobs:
           </resources>
           XML
 
-          APP_GRADLE=android/app/build.gradle.kts
-          sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
-          sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
+          APP_GRADLE=android/app/build.gradle
+          sed -i -E 's/compileSdk[[:space:]]+flutter\.compileSdkVersion/compileSdk 36/' "$APP_GRADLE"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$APP_GRADLE"
+          sed -i -E 's/compileSdk[[:space:]]+[0-9]+/compileSdk 36/' "$APP_GRADLE"
           grep -n 'compileSdk' "$APP_GRADLE"
-          grep -n 'CaseonePOS\|icon\|roundIcon' "$MANIFEST"
+          grep -n 'CaseonePOS\|INTERNET\|usesCleartextTraffic\|icon' "$MANIFEST"
 
       - name: Resolve dependencies
         id: deps
@@ -144,7 +127,15 @@ jobs:
           grep -n 'compileSdk' "$PICKER"
           grep -qE 'compileSdk(Version)?([[:space:]]*=)?[[:space:]]*36' "$PICKER"
 
-      - name: Build CaseonePOS APK
+      - name: Flutter analyze critical startup files
+        id: analyze
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          dart analyze lib/main.dart lib/services/db_service.dart lib/services/server_config_service.dart || true
+
+      - name: Build CaseonePOS 1.1.4 APK
         id: apk
         shell: bash
         run: |
@@ -153,18 +144,18 @@ jobs:
           flutter build apk --debug
           APK=build/app/outputs/flutter-apk/app-debug.apk
           test -s "$APK"
-          cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.1.apk"
-          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.1.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.1.sha256"
-          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1.apk"
+          cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.apk"
+          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.sha256"
+          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.4.apk"
 
-      - name: Upload CaseonePOS APK
+      - name: Upload CaseonePOS 1.1.4 APK
         id: artifact
         uses: actions/upload-artifact@v4
         with:
-          name: CaseonePOS-APK
+          name: CaseonePOS-1.1.4-APK
           path: |
-            CaseonePOS-1.1.1.apk
-            CaseonePOS-1.1.1.sha256
+            CaseonePOS-1.1.4.apk
+            CaseonePOS-1.1.4.sha256
           retention-days: 30
           if-no-files-found: error
 
@@ -177,28 +168,28 @@ jobs:
           set +e
           cd "$GITHUB_WORKSPACE"
           {
-            echo "CaseonePOS APK build report"
+            echo "CaseonePOS 1.1.4 APK build report"
             echo "run_id=$GITHUB_RUN_ID"
             echo "job_status=${{ job.status }}"
             echo "restore=${{ steps.restore.outcome }}"
             echo "flutter=${{ steps.flutter.outcome }}"
-            echo "wrapper=${{ steps.wrapper.outcome }}"
-            echo "branding=${{ steps.branding.outcome }}"
+            echo "android=${{ steps.android.outcome }}"
             echo "dependencies=${{ steps.deps.outcome }}"
+            echo "analyze=${{ steps.analyze.outcome }}"
             echo "apk_build=${{ steps.apk.outcome }}"
             echo "artifact=${{ steps.artifact.outcome }}"
-            if [ -s CaseonePOS-1.1.1.apk ]; then
+            if [ -s CaseonePOS-1.1.4.apk ]; then
               echo "apk_present=yes"
-              echo "apk_size=$(wc -c < CaseonePOS-1.1.1.apk)"
-              sha256sum CaseonePOS-1.1.1.apk
+              echo "apk_size=$(wc -c < CaseonePOS-1.1.4.apk)"
+              sha256sum CaseonePOS-1.1.4.apk
             else
               echo "apk_present=no"
             fi
-          } > caseonepos_build_status.txt
-          CONTENT=$(base64 -w0 caseonepos_build_status.txt)
-          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt?ref=main" --jq .sha 2>/dev/null || true)
+          } > caseonepos_1_1_4_build_status.txt
+          CONTENT=$(base64 -w0 caseonepos_1_1_4_build_status.txt)
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/contents/caseonepos_1_1_4_build_status.txt?ref=main" --jq .sha 2>/dev/null || true)
           if [ -n "$SHA" ]; then
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt" -f message='CI: update CaseonePOS APK build status' -f content="$CONTENT" -f branch=main -f sha="$SHA" >/dev/null || true
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_1_1_4_build_status.txt" -f message='CI: update CaseonePOS 1.1.4 build status' -f content="$CONTENT" -f branch=main -f sha="$SHA" >/dev/null || true
           else
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_build_status.txt" -f message='CI: add CaseonePOS APK build status' -f content="$CONTENT" -f branch=main >/dev/null || true
+            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/caseonepos_1_1_4_build_status.txt" -f message='CI: add CaseonePOS 1.1.4 build status' -f content="$CONTENT" -f branch=main >/dev/null || true
           fi

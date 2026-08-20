@@ -1,0 +1,162 @@
+name: Build final CaseonePOS APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-caseonepos-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Flutter source branch
+        uses: actions/checkout@v4
+        with:
+          ref: flutter-source-import
+
+      - name: Restore verified CaseonePOS Flutter source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/caseonepos"
+          rm -rf "$SRC"
+          mkdir -p "$SRC"
+          cat \
+            flutter_payload_v5/part_00 \
+            flutter_payload_v5/part_01 \
+            flutter_payload_v5/part_02_03 \
+            flutter_payload_v5/part_04_05 \
+            flutter_payload_v5_fix/p06_0 \
+            flutter_payload_v5_fix/p06_1 \
+            flutter_payload_v5_fix/p07_0 \
+            flutter_payload_v5_fix/p07_1 \
+            flutter_payload_v5/part_08_09 \
+            flutter_payload_v5/part_10_11 \
+            flutter_payload_v5_fix/p12_0 \
+            flutter_payload_v5_fix/p12_1 \
+            flutter_payload_v5_fix/p13_0 \
+            flutter_payload_v5_fix/p13_1 \
+            flutter_payload_v5/part_14_15 \
+            flutter_payload_v5/part_16_17 \
+            flutter_payload_v5/part_18 \
+            | tr -d '\r\n ' > "$RUNNER_TEMP/core_only.b64"
+          test "$(wc -c < "$RUNNER_TEMP/core_only.b64")" -eq 186104
+          base64 -d "$RUNNER_TEMP/core_only.b64" > "$RUNNER_TEMP/core_only.tar.xz"
+          echo 'd9cbd6fe265b51bc8d3ecd3266233fcf92c57e283fcc03fdb732c8ba693fe47b  '"$RUNNER_TEMP/core_only.tar.xz" | sha256sum -c -
+          xz -t "$RUNNER_TEMP/core_only.tar.xz"
+          xz -dc "$RUNNER_TEMP/core_only.tar.xz" | tar -xf - -C "$SRC"
+          test -s "$SRC/pubspec.yaml"
+          test -s "$SRC/lib/main.dart"
+          echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter create --platforms=android --org uz.caseonepos --project-name caseonepos .
+
+      - name: Apply CaseonePOS name logo splash and API 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          mkdir -p assets/images assets/fonts
+          LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
+          test -s "$LOGO"
+          cp "$LOGO" assets/images/logo.png
+          cp "$LOGO" assets/images/logo_icon.png
+
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
+          rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
+          for dir in android/app/src/main/res/mipmap-*dpi; do
+            [ -d "$dir" ] || continue
+            cp "$LOGO" "$dir/ic_launcher.png"
+            cp "$LOGO" "$dir/ic_launcher_round.png"
+          done
+          mkdir -p android/app/src/main/res/drawable
+          cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
+          if grep -q 'android:roundIcon=' "$MANIFEST"; then
+            sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
+          else
+            sed -i 's#<application#<application android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
+          fi
+          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
+
+          cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+              <item android:drawable="@android:color/white" />
+              <item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" /></item>
+          </layer-list>
+          XML
+
+          mkdir -p android/app/src/main/res/values-v31
+          cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+                  <item name="android:windowSplashScreenBackground">#FFFFFF</item>
+                  <item name="android:windowSplashScreenAnimatedIcon">@drawable/caseonepos_logo</item>
+                  <item name="android:windowSplashScreenIconBackgroundColor">#FFFFFF</item>
+                  <item name="android:windowLightStatusBar">true</item>
+                  <item name="android:windowNoTitle">true</item>
+              </style>
+              <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+                  <item name="android:windowBackground">?android:colorBackground</item>
+              </style>
+          </resources>
+          XML
+
+          APP_GRADLE=android/app/build.gradle.kts
+          sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
+          sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
+          grep -n 'compileSdk' "$APP_GRADLE"
+
+      - name: Resolve dependencies and patch file_picker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter pub get
+          PICKER="$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit)"
+          test -n "$PICKER"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$PICKER"
+          sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/' "$PICKER"
+          grep -n 'compileSdk' "$PICKER"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter build apk --debug
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$APK"
+          cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
+          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.sha256"
+          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaseonePOS-Final-APK
+          path: |
+            CaseonePOS-1.1.1-debug.apk
+            CaseonePOS-1.1.1-debug.sha256
+          if-no-files-found: error

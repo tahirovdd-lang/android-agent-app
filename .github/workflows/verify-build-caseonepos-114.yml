@@ -1,0 +1,127 @@
+name: Verify and Build CaseonePOS 1.1.4
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/verify-build-caseonepos-114.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout restoration branch
+        uses: actions/checkout@v4
+
+      - name: Restore and verify exact 1.1.4 source
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAYLOAD="$RUNNER_TEMP/caseonepos114.b64"
+          ARCHIVE="$RUNNER_TEMP/caseonepos114.tar.xz"
+          EXTRACT="$RUNNER_TEMP/caseonepos114"
+          mkdir -p "$EXTRACT"
+
+          cat \
+            payload_1_1_4_v2/part_00.b64 \
+            payload_1_1_4_v2/part_01.b64 \
+            payload_1_1_4_v2/part_02.b64 \
+            payload_1_1_4_v2/part_03.b64 \
+            payload_1_1_4_v2/part_04.b64 \
+            payload_1_1_4_v2_fix/p05_0.b64 \
+            | tr -d '\r\n ' > "$PAYLOAD"
+
+          base64 -d "$PAYLOAD" > "$ARCHIVE"
+          xz -t "$ARCHIVE"
+          tar -xJf "$ARCHIVE" -C "$EXTRACT"
+
+          PUBSPEC=$(find "$EXTRACT" -maxdepth 3 -name pubspec.yaml -print -quit)
+          test -n "$PUBSPEC"
+          SRC=$(dirname "$PUBSPEC")
+          test -s "$SRC/lib/main.dart"
+          test -s "$SRC/lib/services/backup_service.dart"
+          test -s "$SRC/lib/screens/system_settings_screen.dart"
+          grep -q '^version: 1.1.4+13' "$PUBSPEC"
+
+          echo '52ca46769d493b9d2f0a6af4389dfa4e098adb11fd6d7fb561ba8814e102cc09  '"$SRC/pubspec.yaml" | sha256sum -c -
+          echo '0ec15f78f439d8e9e29ada1b8e9ef4cd577a61ab8676098daacb8fb5ff78cdbc  '"$SRC/lib/main.dart" | sha256sum -c -
+          echo '640739fa58df8d3dd2d9cd7f8841cf8707fcf4b39bd4a00e559aae08f93eefcc  '"$SRC/lib/services/backup_service.dart" | sha256sum -c -
+          echo '5250fd05146806860261050982a6633433fc606e38c4ca81a521c8ee2cf0d3d0  '"$SRC/lib/screens/system_settings_screen.dart" | sha256sum -c -
+
+          echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
+          echo "Verified exact CaseonePOS 1.1.4+13 source" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare Android project and assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter create --platforms=android --org uz.caseonepos --project-name caseonepos .
+          grep -q '^version: 1.1.4+13' pubspec.yaml
+
+          mkdir -p assets/images assets/fonts
+          LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
+          test -s "$LOGO"
+          cp "$LOGO" assets/images/logo.png
+          cp "$LOGO" assets/images/logo_icon.png
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf assets/fonts/DejaVuSans.ttf
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf assets/fonts/DejaVuSans-Bold.ttf
+
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
+          if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
+            sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
+          fi
+          if ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+            sed -i 's#<application#<application android:usesCleartextTraffic="true"#' "$MANIFEST"
+          fi
+
+          APP_GRADLE=android/app/build.gradle.kts
+          sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
+          sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
+
+      - name: Resolve dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter pub get
+          PICKER="$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit || true)"
+          if [ -n "$PICKER" ]; then
+            sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$PICKER"
+            sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/' "$PICKER"
+            sed -i -E 's/compileSdk[[:space:]]+[0-9]+/compileSdk 36/' "$PICKER"
+          fi
+
+      - name: Build CaseonePOS 1.1.4 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CASEONE_SRC"
+          flutter build apk --debug
+          APK=build/app/outputs/flutter-apk/app-debug.apk
+          test -s "$APK"
+          cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.4-debug.apk"
+          sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.4-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.4-debug.sha256"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CaseonePOS-1.1.4-APK
+          path: |
+            CaseonePOS-1.1.4-debug.apk
+            CaseonePOS-1.1.4-debug.sha256
+          retention-days: 30
+          if-no-files-found: error

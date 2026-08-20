@@ -1,0 +1,73 @@
+name: Recover CaseonePOS 1.1.4 truncated tail
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/recover-caseonepos-114-truncated-tail.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover tar stream and verify source
+        id: recover
+        shell: bash
+        run: |
+          set -u
+          OUT=caseonepos_1_1_4_tail_recovery.txt
+          : > "$OUT"
+          cat payload_1_1_4_v2/part_00.b64 payload_1_1_4_v2/part_01.b64 payload_1_1_4_v2/part_02.b64 payload_1_1_4_v2/part_03.b64 payload_1_1_4_v2/part_04.b64 payload_1_1_4_v2_fix/p05_0.b64 | tr -d '\r\n ' > "$RUNNER_TEMP/prefix.b64"
+          echo "base64_prefix_len=$(wc -c < "$RUNNER_TEMP/prefix.b64")" >> "$OUT"
+          printf '==' >> "$RUNNER_TEMP/prefix.b64"
+          if base64 -d "$RUNNER_TEMP/prefix.b64" > "$RUNNER_TEMP/prefix.xz"; then echo 'base64_decode=success' >> "$OUT"; else echo 'base64_decode=failure' >> "$OUT"; fi
+          echo "xz_prefix_bytes=$(wc -c < "$RUNNER_TEMP/prefix.xz")" >> "$OUT"
+          set +e
+          xz -dc "$RUNNER_TEMP/prefix.xz" > "$RUNNER_TEMP/recovered.tar" 2> "$RUNNER_TEMP/xz.err"
+          XZ_RC=$?
+          set -e
+          echo "xz_rc=$XZ_RC" >> "$OUT"
+          echo "tar_bytes=$(wc -c < "$RUNNER_TEMP/recovered.tar")" >> "$OUT"
+          echo "xz_error=$(tr '\n' ' ' < "$RUNNER_TEMP/xz.err")" >> "$OUT"
+          mkdir -p "$RUNNER_TEMP/src"
+          set +e
+          tar -xf "$RUNNER_TEMP/recovered.tar" -C "$RUNNER_TEMP/src" 2> "$RUNNER_TEMP/tar.err"
+          TAR_RC=$?
+          set -e
+          echo "tar_rc=$TAR_RC" >> "$OUT"
+          echo "tar_error=$(tr '\n' ' ' < "$RUNNER_TEMP/tar.err")" >> "$OUT"
+          PUBSPEC=$(find "$RUNNER_TEMP/src" -maxdepth 4 -name pubspec.yaml -print -quit)
+          echo "pubspec=$PUBSPEC" >> "$OUT"
+          if [ -n "$PUBSPEC" ]; then
+            SRC=$(dirname "$PUBSPEC")
+            VER=$(grep '^version:' "$SRC/pubspec.yaml" || true)
+            echo "$VER" >> "$OUT"
+            for item in \
+              'pubspec.yaml:52ca46769d493b9d2f0a6af4389dfa4e098adb11fd6d7fb561ba8814e102cc09' \
+              'lib/main.dart:0ec15f78f439d8e9e29ada1b8e9ef4cd577a61ab8676098daacb8fb5ff78cdbc' \
+              'lib/services/backup_service.dart:640739fa58df8d3dd2d9cd7f8841cf8707fcf4b39bd4a00e559aae08f93eefcc' \
+              'lib/screens/system_settings_screen.dart:5250fd05146806860261050982a6633433fc606e38c4ca81a521c8ee2cf0d3d0'; do
+              FILE=${item%%:*}; EXPECTED=${item#*:}
+              if [ -f "$SRC/$FILE" ]; then
+                ACTUAL=$(sha256sum "$SRC/$FILE" | awk '{print $1}')
+                echo "$FILE=$ACTUAL expected=$EXPECTED match=$([ "$ACTUAL" = "$EXPECTED" ] && echo yes || echo no)" >> "$OUT"
+              else
+                echo "$FILE=missing" >> "$OUT"
+              fi
+            done
+          fi
+          cat "$OUT"
+      - name: Save recovery report
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- caseonepos_1_1_4_tail_recovery.txt
+          git commit -m 'CI: test 1.1.4 truncated-tail recovery' || exit 0
+          git push origin HEAD:restore-caseonepos-1.1.4 || true

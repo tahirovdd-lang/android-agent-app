@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -23,31 +23,30 @@ jobs:
           ref: flutter-source-import
 
       - name: Restore verified Flutter source
+        id: restore
         shell: bash
         run: |
           set -euo pipefail
           SRC="$RUNNER_TEMP/caseonepos"
+          rm -rf "$SRC"
           mkdir -p "$SRC"
-
           base64 -d flutter_payload_v4/core_only.b64 > "$RUNNER_TEMP/core_only.tar.xz"
           echo 'd9cbd6fe265b51bc8d3ecd3266233fcf92c57e283fcc03fdb732c8ba693fe47b  '"$RUNNER_TEMP/core_only.tar.xz" | sha256sum -c -
           xz -t "$RUNNER_TEMP/core_only.tar.xz"
           xz -dc "$RUNNER_TEMP/core_only.tar.xz" | tar -xf - -C "$SRC"
-
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
-
           echo '--- Flutter source restored ---'
           find "$SRC" -maxdepth 2 -type f | sort | head -80
 
       - name: Prepare CaseonePOS assets
+        id: assets
         shell: bash
         run: |
           set -euo pipefail
           cd "$CASEONE_SRC"
           mkdir -p assets/images assets/fonts
-
           LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
           test -s "$LOGO"
           cp "$LOGO" assets/images/logo.png
@@ -55,12 +54,14 @@ jobs:
           file assets/images/logo.png assets/images/logo_icon.png
 
       - name: Setup Flutter
+        id: flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Generate Android wrapper
+        id: wrapper
         shell: bash
         run: |
           set -euo pipefail
@@ -70,32 +71,23 @@ jobs:
           test -f android/app/src/main/AndroidManifest.xml
 
       - name: Apply CaseonePOS branding
+        id: branding
         shell: bash
         run: |
           set -euo pipefail
           cd "$CASEONE_SRC"
-
           MANIFEST=android/app/src/main/AndroidManifest.xml
           LOGO=assets/images/logo_icon.png
-
-          # App name.
           sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
-
-          # Remove adaptive launcher XMLs that can override the PNG with the default Flutter/Android icon.
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-
-          # Use the CaseonePOS PNG for every launcher density.
           for dir in android/app/src/main/res/mipmap-*dpi; do
             [ -d "$dir" ] || continue
             cp "$LOGO" "$dir/ic_launcher.png"
             cp "$LOGO" "$dir/ic_launcher_round.png"
           done
-
           mkdir -p android/app/src/main/res/drawable
           cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
-
-          # Ensure manifest points to launcher resources.
           if grep -q 'android:icon=' "$MANIFEST"; then
             sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
           else
@@ -106,21 +98,15 @@ jobs:
           else
             sed -i 's#<application#<application android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           fi
-
-          # Legacy splash: white background + CaseonePOS logo only.
           cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item android:drawable="@android:color/white" />
               <item>
-                  <bitmap
-                      android:gravity="center"
-                      android:src="@drawable/caseonepos_logo" />
+                  <bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" />
               </item>
           </layer-list>
           XML
-
-          # Android 12+ splash: explicitly use CaseonePOS logo and white background.
           mkdir -p android/app/src/main/res/values-v31
           cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
@@ -138,16 +124,13 @@ jobs:
               </style>
           </resources>
           XML
-
           echo '--- Manifest branding ---'
           grep -n 'application\|label\|icon\|roundIcon' "$MANIFEST" | head -20
-          echo '--- Launcher resources ---'
-          find android/app/src/main/res -name 'ic_launcher*' -o -name 'caseonepos_logo.png' | sort
-
           test "$(grep -c 'android:label="CaseonePOS"' "$MANIFEST")" -ge 1
           test -s android/app/src/main/res/drawable/caseonepos_logo.png
 
       - name: Resolve Flutter dependencies
+        id: pubget
         shell: bash
         run: |
           set -euo pipefail
@@ -155,6 +138,7 @@ jobs:
           flutter pub get
 
       - name: Build debug APK
+        id: apk
         shell: bash
         run: |
           set -euo pipefail
@@ -167,6 +151,7 @@ jobs:
           ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
 
       - name: Upload CaseonePOS APK
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: CaseonePOS-Flutter-APK
@@ -174,3 +159,40 @@ jobs:
             CaseonePOS-1.1.1-debug.apk
             CaseonePOS-1.1.1-debug.sha256
           if-no-files-found: error
+
+      - name: Record build status in repository
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "CaseonePOS Flutter build report"
+            echo "source_commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "job_status=${{ job.status }}"
+            echo "restore=${{ steps.restore.outcome }}"
+            echo "assets=${{ steps.assets.outcome }}"
+            echo "flutter_setup=${{ steps.flutter.outcome }}"
+            echo "wrapper=${{ steps.wrapper.outcome }}"
+            echo "branding=${{ steps.branding.outcome }}"
+            echo "pub_get=${{ steps.pubget.outcome }}"
+            echo "apk_build=${{ steps.apk.outcome }}"
+            echo "artifact=${{ steps.artifact.outcome }}"
+            if [ -s CaseonePOS-1.1.1-debug.apk ]; then
+              echo "apk_present=yes"
+              echo "apk_size=$(wc -c < CaseonePOS-1.1.1-debug.apk)"
+              sha256sum CaseonePOS-1.1.1-debug.apk
+            else
+              echo "apk_present=no"
+            fi
+          } > ci_build_status.txt
+          cat ci_build_status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci_build_status.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "CI: record CaseonePOS Flutter build status"
+            git pull --rebase origin flutter-source-import || true
+            git push origin HEAD:flutter-source-import || true
+          fi

@@ -1,0 +1,53 @@
+name: Diagnose CaseonePOS 1.1.4 payload
+
+on:
+  push:
+    branches: [restore-caseonepos-1.1.4]
+    paths:
+      - '.github/workflows/diagnose-caseonepos-114-payload.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect old payload
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' > caseonepos_1_1_4_payload_diagnostic.txt
+          from pathlib import Path
+          import re
+          files=[Path(f'payload_1_1_4_v2/part_{i:02d}.b64') for i in range(6)]
+          allowed=set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\r\n \t')
+          print('CaseonePOS 1.1.4 payload diagnostic')
+          total=''
+          for p in files:
+              s=p.read_text(errors='replace')
+              bad=[(i,repr(ch)) for i,ch in enumerate(s) if ch not in allowed]
+              clean=''.join(s.split())
+              print(f'{p}: raw={len(s)} clean={len(clean)} mod4={len(clean)%4} bad_count={len(bad)}')
+              if bad:
+                  print(' bad_first=',bad[:20])
+              total += clean
+          bad_total=[(i,repr(ch)) for i,ch in enumerate(total) if ch not in set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=')]
+          print(f'total_clean={len(total)} mod4={len(total)%4} total_bad={len(bad_total)}')
+          print('total_bad_first=',bad_total[:50])
+          for idx,_ in bad_total[:10]:
+              print(f'context@{idx}={total[max(0,idx-40):idx+80]!r}')
+          PY
+          cat caseonepos_1_1_4_payload_diagnostic.txt
+      - name: Save diagnostic
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- caseonepos_1_1_4_payload_diagnostic.txt
+          git commit -m 'CI: diagnose CaseonePOS 1.1.4 payload' || exit 0
+          git push origin HEAD:restore-caseonepos-1.1.4 || true

@@ -140,7 +140,9 @@ jobs:
           test -n "$PICKER"
           sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$PICKER"
           sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/' "$PICKER"
+          sed -i -E 's/compileSdk[[:space:]]+[0-9]+/compileSdk 36/' "$PICKER"
           grep -n 'compileSdk' "$PICKER"
+          grep -qE 'compileSdk(Version)?([[:space:]]*=)?[[:space:]]*36' "$PICKER"
 
       - name: Build CaseonePOS APK
         id: apk

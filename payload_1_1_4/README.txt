@@ -1,0 +1,1 @@
+CaseonePOS 1.1.4 Android core payload. SHA-256 of decoded tar.xz: 1d4f1884ab683b0c3aa6521a91a35638ce0ac97bb2eac27228c24f35fa31e84e

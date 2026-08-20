@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -22,6 +22,7 @@ jobs:
           ref: flutter-source-import
 
       - name: Restore verified CaseonePOS Flutter source
+        id: restore
         shell: bash
         run: |
           set -euo pipefail
@@ -57,12 +58,14 @@ jobs:
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
 
       - name: Setup Flutter
+        id: flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
       - name: Generate Android wrapper
+        id: wrapper
         shell: bash
         run: |
           set -euo pipefail
@@ -70,6 +73,7 @@ jobs:
           flutter create --platforms=android --org uz.caseonepos --project-name caseonepos .
 
       - name: Apply CaseonePOS name logo splash and API 36
+        id: branding
         shell: bash
         run: |
           set -euo pipefail
@@ -129,6 +133,7 @@ jobs:
           grep -n 'compileSdk' "$APP_GRADLE"
 
       - name: Resolve dependencies and patch file_picker
+        id: deps
         shell: bash
         run: |
           set -euo pipefail
@@ -141,6 +146,7 @@ jobs:
           grep -n 'compileSdk' "$PICKER"
 
       - name: Build APK
+        id: apk
         shell: bash
         run: |
           set -euo pipefail
@@ -153,6 +159,7 @@ jobs:
           ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
 
       - name: Upload APK artifact
+        id: artifact
         uses: actions/upload-artifact@v4
         with:
           name: CaseonePOS-Final-APK
@@ -160,3 +167,40 @@ jobs:
             CaseonePOS-1.1.1-debug.apk
             CaseonePOS-1.1.1-debug.sha256
           if-no-files-found: error
+
+      - name: Record final build status
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          cd "$GITHUB_WORKSPACE"
+          {
+            echo "CaseonePOS final build report"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "job_status=${{ job.status }}"
+            echo "restore=${{ steps.restore.outcome }}"
+            echo "flutter=${{ steps.flutter.outcome }}"
+            echo "wrapper=${{ steps.wrapper.outcome }}"
+            echo "branding=${{ steps.branding.outcome }}"
+            echo "dependencies=${{ steps.deps.outcome }}"
+            echo "apk_build=${{ steps.apk.outcome }}"
+            echo "artifact=${{ steps.artifact.outcome }}"
+            if [ -s CaseonePOS-1.1.1-debug.apk ]; then
+              echo "apk_present=yes"
+              echo "apk_size=$(wc -c < CaseonePOS-1.1.1-debug.apk)"
+              sha256sum CaseonePOS-1.1.1-debug.apk
+            else
+              echo "apk_present=no"
+            fi
+          } > caseonepos_final_status.txt
+          cat caseonepos_final_status.txt
+          git fetch origin main
+          git checkout main
+          cp "$GITHUB_WORKSPACE/caseonepos_final_status.txt" caseonepos_final_status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add caseonepos_final_status.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "CI: record final CaseonePOS APK status"
+            git push origin main || true
+          fi

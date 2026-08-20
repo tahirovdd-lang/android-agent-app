@@ -31,6 +31,9 @@ jobs:
           rm -rf "$SRC"
           mkdir -p "$SRC"
 
+          # part_12_13 contains one accidental trailing byte in GitHub; keep the verified first 20000 bytes.
+          head -c 20000 flutter_payload_v5/part_12_13 > "$RUNNER_TEMP/part_12_13.clean"
+
           cat \
             flutter_payload_v5/part_00 \
             flutter_payload_v5/part_01 \
@@ -39,7 +42,7 @@ jobs:
             flutter_payload_v5/part_06_07 \
             flutter_payload_v5/part_08_09 \
             flutter_payload_v5/part_10_11 \
-            flutter_payload_v5/part_12_13 \
+            "$RUNNER_TEMP/part_12_13.clean" \
             flutter_payload_v5/part_14_15 \
             flutter_payload_v5/part_16_17 \
             flutter_payload_v5/part_18 \
@@ -57,8 +60,6 @@ jobs:
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
-          echo '--- Flutter source restored ---'
-          find "$SRC" -maxdepth 2 -type f | sort | head -80
 
       - name: Prepare CaseonePOS assets
         id: assets
@@ -71,7 +72,6 @@ jobs:
           test -s "$LOGO"
           cp "$LOGO" assets/images/logo.png
           cp "$LOGO" assets/images/logo_icon.png
-          file assets/images/logo.png assets/images/logo_icon.png
 
       - name: Setup Flutter
         id: flutter
@@ -100,7 +100,6 @@ jobs:
           LOGO=assets/images/logo_icon.png
 
           sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
-
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
 
@@ -118,7 +117,6 @@ jobs:
           else
             sed -i 's#<application#<application android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
           fi
-
           if grep -q 'android:roundIcon=' "$MANIFEST"; then
             sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           else
@@ -129,9 +127,7 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item android:drawable="@android:color/white" />
-              <item>
-                  <bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" />
-              </item>
+              <item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" /></item>
           </layer-list>
           XML
 
@@ -144,7 +140,6 @@ jobs:
                   <item name="android:windowSplashScreenAnimatedIcon">@drawable/caseonepos_logo</item>
                   <item name="android:windowSplashScreenIconBackgroundColor">#FFFFFF</item>
                   <item name="android:windowLightStatusBar">true</item>
-                  <item name="android:windowActionModeOverlay">true</item>
                   <item name="android:windowNoTitle">true</item>
               </style>
               <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
@@ -153,10 +148,8 @@ jobs:
           </resources>
           XML
 
-          echo '--- Manifest branding ---'
           grep -n 'application\|label\|icon\|roundIcon' "$MANIFEST" | head -20
           test "$(grep -c 'android:label="CaseonePOS"' "$MANIFEST")" -ge 1
-          test -s android/app/src/main/res/drawable/caseonepos_logo.png
 
       - name: Resolve Flutter dependencies
         id: pubget
@@ -177,7 +170,6 @@ jobs:
           test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
           sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.sha256"
-          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
 
       - name: Upload CaseonePOS APK
         id: artifact

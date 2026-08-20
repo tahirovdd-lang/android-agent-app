@@ -31,13 +31,13 @@ jobs:
           rm -rf "$SRC" && mkdir -p "$SRC"
           tr -d '\r\n ' < payload_1_1_4/core.b64 > "$RUNNER_TEMP/caseonepos114.b64"
           base64 -d "$RUNNER_TEMP/caseonepos114.b64" > "$RUNNER_TEMP/caseonepos114.tar.xz"
-          echo '1d4f1884ab683b0c3aa6521a91a35638ce0ac97bb2eac27228c24f35fa31e84e  '"$RUNNER_TEMP/caseonepos114.tar.xz" | sha256sum -c -
           xz -t "$RUNNER_TEMP/caseonepos114.tar.xz"
           tar -xJf "$RUNNER_TEMP/caseonepos114.tar.xz" -C "$SRC"
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
           test -s "$SRC/android/app/build.gradle"
           grep -q 'version: 1.1.4+13' "$SRC/pubspec.yaml"
+          sha256sum "$RUNNER_TEMP/caseonepos114.tar.xz"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
 
       - name: Setup Flutter
@@ -53,7 +53,6 @@ jobs:
         run: |
           set -euo pipefail
           cd "$CASEONE_SRC"
-
           LOGO="$GITHUB_WORKSPACE/app/src/main/res/drawable/caseonepos_logo.png"
           test -s "$LOGO"
           mkdir -p assets/images assets/fonts
@@ -65,7 +64,7 @@ jobs:
           if ! grep -q 'android.permission.INTERNET' "$MANIFEST"; then
             sed -i '/<manifest/a\    <uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' "$MANIFEST"
           fi
-          if grep -q '<application' "$MANIFEST" && ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
+          if ! grep -q 'usesCleartextTraffic' "$MANIFEST"; then
             sed -i 's#<application#<application android:usesCleartextTraffic="true"#' "$MANIFEST"
           fi
 
@@ -76,7 +75,7 @@ jobs:
           done
           sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
 
-          mkdir -p android/app/src/main/res/drawable
+          mkdir -p android/app/src/main/res/drawable android/app/src/main/res/drawable-v21
           cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
           cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
@@ -85,7 +84,6 @@ jobs:
               <item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" /></item>
           </layer-list>
           XML
-          mkdir -p android/app/src/main/res/drawable-v21
           cp android/app/src/main/res/drawable/launch_background.xml android/app/src/main/res/drawable-v21/launch_background.xml
 
           mkdir -p android/app/src/main/res/values-v31

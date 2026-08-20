@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
@@ -31,7 +31,6 @@ jobs:
           SRC="$RUNNER_TEMP/caseonepos"
           rm -rf "$SRC"
           mkdir -p "$SRC"
-
           cat \
             flutter_payload_v5/part_00 \
             flutter_payload_v5/part_01 \
@@ -51,20 +50,14 @@ jobs:
             flutter_payload_v5/part_16_17 \
             flutter_payload_v5/part_18 \
             | tr -d '\r\n ' > "$RUNNER_TEMP/core_only.b64"
-
-          CHARS=$(wc -c < "$RUNNER_TEMP/core_only.b64")
-          echo "Base64 characters: $CHARS"
-          test "$CHARS" -eq 186104
-
+          test "$(wc -c < "$RUNNER_TEMP/core_only.b64")" -eq 186104
           base64 -d "$RUNNER_TEMP/core_only.b64" > "$RUNNER_TEMP/core_only.tar.xz"
           echo 'd9cbd6fe265b51bc8d3ecd3266233fcf92c57e283fcc03fdb732c8ba693fe47b  '"$RUNNER_TEMP/core_only.tar.xz" | sha256sum -c -
           xz -t "$RUNNER_TEMP/core_only.tar.xz"
           xz -dc "$RUNNER_TEMP/core_only.tar.xz" | tar -xf - -C "$SRC"
-
           test -s "$SRC/pubspec.yaml"
           test -s "$SRC/lib/main.dart"
           echo "CASEONE_SRC=$SRC" >> "$GITHUB_ENV"
-          echo "Verified Flutter source restored successfully"
 
       - name: Prepare CaseonePOS assets
         id: assets
@@ -77,7 +70,6 @@ jobs:
           test -s "$LOGO"
           cp "$LOGO" assets/images/logo.png
           cp "$LOGO" assets/images/logo_icon.png
-          file assets/images/logo.png
 
       - name: Setup Flutter
         id: flutter
@@ -92,7 +84,6 @@ jobs:
         run: |
           set -euo pipefail
           cd "$CASEONE_SRC"
-          flutter --version
           flutter create --platforms=android --org uz.caseonepos --project-name caseonepos .
           test -f android/app/src/main/AndroidManifest.xml
 
@@ -104,42 +95,29 @@ jobs:
           cd "$CASEONE_SRC"
           MANIFEST=android/app/src/main/AndroidManifest.xml
           LOGO=assets/images/logo_icon.png
-
           sed -i 's/android:label="[^"]*"/android:label="CaseonePOS"/' "$MANIFEST"
-
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
           rm -f android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-
           for dir in android/app/src/main/res/mipmap-*dpi; do
             [ -d "$dir" ] || continue
             cp "$LOGO" "$dir/ic_launcher.png"
             cp "$LOGO" "$dir/ic_launcher_round.png"
           done
-
           mkdir -p android/app/src/main/res/drawable
           cp "$LOGO" android/app/src/main/res/drawable/caseonepos_logo.png
-
-          if grep -q 'android:icon=' "$MANIFEST"; then
-            sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
-          else
-            sed -i 's#<application#<application android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
-          fi
           if grep -q 'android:roundIcon=' "$MANIFEST"; then
             sed -i 's#android:roundIcon="@[^"]*"#android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           else
             sed -i 's#<application#<application android:roundIcon="@mipmap/ic_launcher_round"#' "$MANIFEST"
           fi
-
+          sed -i 's#android:icon="@[^"]*"#android:icon="@mipmap/ic_launcher"#' "$MANIFEST"
           cat > android/app/src/main/res/drawable/launch_background.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
           <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
               <item android:drawable="@android:color/white" />
-              <item>
-                  <bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" />
-              </item>
+              <item><bitmap android:gravity="center" android:src="@drawable/caseonepos_logo" /></item>
           </layer-list>
           XML
-
           mkdir -p android/app/src/main/res/values-v31
           cat > android/app/src/main/res/values-v31/styles.xml <<'XML'
           <?xml version="1.0" encoding="utf-8"?>
@@ -156,10 +134,7 @@ jobs:
               </style>
           </resources>
           XML
-
-          grep -n 'application\|label\|icon\|roundIcon' "$MANIFEST" | head -20
           test "$(grep -c 'android:label="CaseonePOS"' "$MANIFEST")" -ge 1
-          test -s android/app/src/main/res/drawable/caseonepos_logo.png
 
       - name: Resolve Flutter dependencies
         id: pubget
@@ -168,6 +143,25 @@ jobs:
           set -euo pipefail
           cd "$CASEONE_SRC"
           flutter pub get
+
+      - name: Use Android API 36
+        id: sdk36
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+          cd "$CASEONE_SRC"
+          APP_GRADLE=android/app/build.gradle.kts
+          if [ -f "$APP_GRADLE" ]; then
+            sed -i -E 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 36/' "$APP_GRADLE"
+            sed -i -E 's/compileSdk = [0-9]+/compileSdk = 36/' "$APP_GRADLE"
+          fi
+          PICKER=$(find "$PUB_CACHE/hosted" -path '*/file_picker-8.3.7/android/build.gradle' -print -quit)
+          test -n "$PICKER"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/' "$PICKER"
+          sed -i -E 's/compileSdk[[:space:]]*=[[:space:]]*[0-9]+/compileSdk = 36/' "$PICKER"
+          grep -n 'compileSdk' "$PICKER" || true
 
       - name: Build debug APK
         id: apk
@@ -180,7 +174,6 @@ jobs:
           test -s "$APK"
           cp "$APK" "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
           sha256sum "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk" > "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.sha256"
-          ls -lh "$GITHUB_WORKSPACE/CaseonePOS-1.1.1-debug.apk"
 
       - name: Upload CaseonePOS APK
         id: artifact
@@ -209,6 +202,7 @@ jobs:
             echo "wrapper=${{ steps.wrapper.outcome }}"
             echo "branding=${{ steps.branding.outcome }}"
             echo "pub_get=${{ steps.pubget.outcome }}"
+            echo "sdk36=${{ steps.sdk36.outcome }}"
             echo "apk_build=${{ steps.apk.outcome }}"
             echo "artifact=${{ steps.artifact.outcome }}"
             if [ -s CaseonePOS-1.1.1-debug.apk ]; then
